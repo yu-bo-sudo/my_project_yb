@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手语动作编辑器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #container { width: 100vw; height: 100vh; }
+
+        /* 加载界面 */
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        .spinner {
+            width: 60px; height: 60px; border: 4px solid #333;
+            border-top: 4px solid #00d4ff; border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #loading p { color: #fff; margin-top: 20px; font-size: 18px; }
+
+        /* 控制面板 */
+        .panel {
+            position: fixed;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 12px;
+            color: #fff;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+        }
+
+        /* 左侧：手语预设 */
+        #preset-panel {
+            top: 10px; left: 10px;
+            width: 180px;
+            max-height: 95vh;
+        }
+
+        /* 右侧：骨骼控制 */
+        #bone-panel {
+            top: 10px; right: 10px;
+            width: 320px;
+            max-height: 95vh;
+        }
+
+        .panel h3 {
+            font-size: 14px;
+            color: #00d4ff;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+
+        /* 手语预设按钮 */
+        .sign-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 6px;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            text-align: left;
+        }
+        .sign-btn:hover { background: #00d4ff; color: #000; }
+
+        /* 手选择标签 */
+        .hand-tabs { display: flex; margin-bottom: 10px; }
+        .hand-tab {
+            flex: 1; padding: 8px;
+            border: none; background: #333;
+            color: #fff; cursor: pointer;
+            font-size: 12px;
+        }
+        .hand-tab:first-child { border-radius: 6px 0 0 6px; }
+        .hand-tab:last-child { border-radius: 0 6px 6px 0; }
+        .hand-tab.active { background: #00d4ff; color: #000; }
+
+        /* 手指分组 */
+        .finger-group {
+            background: #222;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .finger-group h4 {
+            font-size: 12px;
+            color: #ffaa00;
+            margin-bottom: 8px;
+        }
+
+        /* 手臂控制分组 */
+        .arm-group {
+            background: #1a3a1a;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .arm-group h4 {
+            font-size: 12px;
+            color: #00ff88;
+            margin-bottom: 8px;
+        }
+
+        /* 快速弯曲控制 */
+        .quick-control {
+            background: #333;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+        .quick-control label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #00d4ff;
+            margin-bottom: 4px;
+        }
+        .quick-control input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #222;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .quick-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: #ff6600;
+            cursor: pointer;
+        }
+
+        /* 骨骼控制 */
+        .bone-control {
+            margin-bottom: 8px;
+        }
+        .bone-control label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 3px;
+        }
+        .bone-control input[type="range"] {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .bone-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: #00d4ff;
+            cursor: pointer;
+        }
+
+        /* 旋转轴选择 */
+        .axis-selector {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 8px;
+        }
+        .axis-btn {
+            flex: 1;
+            padding: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .axis-btn.active { background: #ff6600; }
+
+        /* 底部按钮 */
+        .bottom-btns {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .bottom-btns button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            background: #444;
+            color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .bottom-btns button:hover { background: #555; }
+        .bottom-btns .primary { background: #00d4ff; color: #000; }
+
+        /* 信息显示 */
+        #info {
+            position: fixed;
+            bottom: 10px; left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: #888;
+            font-size: 11px;
+        }
+        #info span { color: #00d4ff; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>加载模型中...</p>
+    </div>
+    <div id="container"></div>
+
+    <!-- 左侧：手语预设面板 -->
+    <div class="panel" id="preset-panel">
+        <h3>手语预设</h3>
+        <button class="sign-btn" onclick="playSign('hello')">你好</button>
+        <button class="sign-btn" onclick="playSign('thanks')">谢谢</button>
+        <button class="sign-btn" onclick="playSign('ok')">好的/OK</button>
+        <button class="sign-btn" onclick="playSign('yes')">是/对</button>
+        <button class="sign-btn" onclick="playSign('no')">不/错</button>
+        <button class="sign-btn" onclick="playSign('peace')">和平/耶</button>
+        <button class="sign-btn" onclick="playSign('thumbsUp')">点赞</button>
+        <button class="sign-btn" onclick="playSign('fist')">握拳</button>
+        <button class="sign-btn" onclick="playSign('open')">张开手掌</button>
+        <button class="sign-btn" onclick="playSign('point')">指向</button>
+
+        <h3 style="margin-top: 15px;">数字</h3>
+        <button class="sign-btn" onclick="playSign('one')">1</button>
+        <button class="sign-btn" onclick="playSign('two')">2</button>
+        <button class="sign-btn" onclick="playSign('three')">3</button>
+        <button class="sign-btn" onclick="playSign('four')">4</button>
+        <button class="sign-btn" onclick="playSign('five')">5</button>
+
+        <h3 style="margin-top: 15px;">其他</h3>
+        <button class="sign-btn" onclick="playSign('stop')">停/等待</button>
+        <button class="sign-btn" onclick="playSign('handshake')">握手</button>
+
+        <h3 style="margin-top: 15px;">运动模式</h3>
+        <button class="sign-btn" id="mode-btn" onclick="toggleMotionMode()">当前: 简单模式</button>
+
+        <h3 style="margin-top: 15px;">录制功能</h3>
+        <button class="sign-btn" id="record-btn" onclick="toggleRecordMode()">开启录制模式</button>
+        <button class="sign-btn" onclick="captureCurrentPose()">捕获当前姿势</button>
+        <button class="sign-btn" onclick="exportRecordedPoses()">导出录制数据</button>
+
+        <h3 style="margin-top: 15px;">调试工具</h3>
+        <button class="sign-btn" onclick="debugBoneAxis()">测试骨骼轴向</button>
+        <button class="sign-btn" onclick="testAllFingers()">测试所有手指</button>
+
+        <div class="bottom-btns">
+            <button onclick="resetAllBones()">重置所有</button>
+        </div>
+    </div>
+
+    <!-- 右侧：骨骼控制面板 -->
+    <div class="panel" id="bone-panel">
+        <h3>骨骼控制</h3>
+
+        <!-- 手选择 -->
+        <div class="hand-tabs">
+            <button class="hand-tab active" onclick="selectHand('left')">左手</button>
+            <button class="hand-tab" onclick="selectHand('right')">右手</button>
+        </div>
+
+        <!-- 当前旋转轴 -->
+        <div class="axis-selector">
+            <button class="axis-btn active" onclick="selectAxis('x')">X轴</button>
+            <button class="axis-btn" onclick="selectAxis('y')">Y轴</button>
+            <button class="axis-btn" onclick="selectAxis('z')">Z轴</button>
+        </div>
+
+        <!-- 手指控制区域 -->
+        <div id="finger-controls"></div>
+
+        <div class="bottom-btns">
+            <button onclick="savePose()">保存姿势</button>
+            <button class="primary" onclick="resetHand()">重置当前手</button>
+        </div>
+    </div>
+
+    <div id="info">
+        拖动旋转 | 滚轮缩放 | <span id="fps">60</span> FPS
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+        // ==================== 全局变量 ====================
+        let scene, camera, renderer, controls, model;
+        let clock = new THREE.Clock();
+        let bones = {};                    // 所有骨骼
+        let originalRotations = {};        // 原始旋转值
+        let animationTargets = {};         // 目标旋转值
+        let currentRotations = {};         // 当前旋转值
+
+        let currentHand = 'left';
+        let currentAxis = 'x';
+        let motionMode = 'simple';         // 'simple' 或 'advanced'
+        let recordMode = false;            // 录制模式开关
+        let recordedPoses = {};            // 录制的姿势数据
+
+        // ==================== 高级运动控制器 ====================
+        // 提取自 three-mediapipe-rig 的核心算法
+
+        const MotionRig = {
+            // lookAt 算法 - 让骨骼朝向目标点
+            lookAt: function(bone, targetDir, poleDir, poleAxis = '+x') {
+                const ghost = new THREE.Object3D();
+                const boneWorldPos = new THREE.Vector3();
+                bone.getWorldPosition(boneWorldPos);
+
+                const target = boneWorldPos.clone().add(targetDir);
+                const pole = boneWorldPos.clone().add(poleDir);
+
+                ghost.position.copy(boneWorldPos);
+                ghost.lookAt(target);
+
+                // 应用极轴修正
+                const HALF_PI = Math.PI / 2;
+                ghost.rotateX(HALF_PI);
+
+                return ghost.quaternion;
+            },
+
+            // 计算手指弯曲（基于方向向量）
+            calculateFingerCurl: function(bones, curlAmount, axis = 'x', direction = 1) {
+                const HALF_PI = Math.PI / 2;
+                const results = [];
+
+                for (let i = 0; i < bones.length; i++) {
+                    const jointFactor = 1 - (i * 0.2);
+                    const angle = curlAmount * HALF_PI * jointFactor * direction;
+                    results.push({ axis, angle });
+                }
+
+                return results;
+            },
+
+            // 平滑插值
+            lerp: function(current, target, speed) {
+                return current + (target - current) * speed;
+            }
+        };
+
+        // 切换运动模式
+        window.toggleMotionMode = function() {
+            motionMode = motionMode === 'simple' ? 'advanced' : 'simple';
+            const btn = document.getElementById('mode-btn');
+            btn.textContent = '当前: ' + (motionMode === 'simple' ? '简单模式' : '高级模式');
+            console.log('运动模式切换为:', motionMode);
+        };
+
+        // ==================== 录制功能 ====================
+        // 开启/关闭录制模式
+        window.toggleRecordMode = function() {
+            recordMode = !recordMode;
+            const btn = document.getElementById('record-btn');
+            btn.textContent = recordMode ? '关闭录制模式' : '开启录制模式';
+            btn.style.background = recordMode ? '#ff6600' : '#333';
+            console.log('录制模式:', recordMode ? '开启' : '关闭');
+        };
+
+        // 捕获当前姿势
+        window.captureCurrentPose = function() {
+            const poseName = prompt('请输入姿势名称:', 'pose_' + Date.now());
+            if (!poseName) return;
+
+            const pose = {
+                timestamp: Date.now(),
+                hand: currentHand,
+                bones: {}
+            };
+
+            // 记录所有骨骼的当前旋转值
+            for (const boneName in bones) {
+                const bone = bones[boneName];
+                pose.bones[boneName] = {
+                    x: bone.rotation.x,
+                    y: bone.rotation.y,
+                    z: bone.rotation.z
+                };
+            }
+
+            recordedPoses[poseName] = pose;
+            console.log(`已捕获姿势: ${poseName}`, pose);
+            alert(`姿势 "${poseName}" 已保存！\n\n可以在控制台查看详细数据`);
+        };
+
+        // 导出录制的姿势数据
+        window.exportRecordedPoses = function() {
+            if (Object.keys(recordedPoses).length === 0) {
+                alert('还没有录制任何姿势！');
+                return;
+            }
+
+            const dataStr = JSON.stringify(recordedPoses, null, 2);
+            console.log('录制的姿势数据:\n', dataStr);
+
+            // 复制到剪贴板
+            navigator.clipboard.writeText(dataStr).then(() => {
+                alert(`已导出 ${Object.keys(recordedPoses).length} 个姿势到剪贴板！\n\n可以粘贴到代码中使用`);
+            }).catch(() => {
+                alert('数据已输出到控制台，请按F12查看');
+            });
+        };
+
+        // 应用录制的姿势
+        window.applyRecordedPose = function(poseName) {
+            const pose = recordedPoses[poseName];
+            if (!pose) {
+                console.error('未找到姿势:', poseName);
+                return;
+            }
+
+            for (const boneName in pose.bones) {
+                if (bones[boneName]) {
+                    animationTargets[boneName] = { ...pose.bones[boneName] };
+                }
+            }
+            console.log('应用姿势:', poseName);
+        };
+
+        // ==================== 调试工具 ====================
+        // 测试单个骨骼的各个轴旋转效果
+        window.debugBoneAxis = function() {
+            const boneName = prompt('输入骨骼名称:', '指DL');
+            if (!boneName || !bones[boneName]) {
+                alert('骨骼不存在');
+                return;
+            }
+
+            const bone = bones[boneName];
+            const testAngle = 0.5; // 测试角度（弧度）
+
+            console.log(`\n=== 测试骨骼: ${boneName} ===`);
+            console.log('原始旋转:', {
+                x: (bone.rotation.x * 180 / Math.PI).toFixed(1) + '°',
+                y: (bone.rotation.y * 180 / Math.PI).toFixed(1) + '°',
+                z: (bone.rotation.z * 180 / Math.PI).toFixed(1) + '°'
+            });
+
+            // 依次测试每个轴
+            const axes = ['x', 'y', 'z'];
+            let currentAxis = 0;
+
+            const testNext = () => {
+                if (currentAxis >= axes.length) {
+                    // 测试完成，恢复原始
+                    animationTargets[boneName] = { ...originalRotations[boneName] };
+                    console.log('测试完成，已恢复原始位置');
+                    return;
+                }
+
+                const axis = axes[currentAxis];
+                const target = {
+                    x: originalRotations[boneName].x,
+                    y: originalRotations[boneName].y,
+                    z: originalRotations[boneName].z
+                };
+                target[axis] = testAngle;
+
+                animationTargets[boneName] = target;
+
+                console.log(`\n测试 ${axis.toUpperCase()} 轴 +${(testAngle * 180 / Math.PI).toFixed(1)}°`);
+                console.log('观察骨骼运动方向，按确定继续下一个轴');
+
+                currentAxis++;
+                setTimeout(() => {
+                    if (confirm(`刚测试了 ${axis.toUpperCase()} 轴正方向。\n\n骨骼是否朝手腕方向弯曲？\n\n确定=是，继续下一个轴\n取消=否，继续下一个轴`)) {
+                        console.log(`>>> ${axis.toUpperCase()} 轴正方向: 正确！`);
+                    } else {
+                        // 测试负方向
+                        target[axis] = -testAngle;
+                        animationTargets[boneName] = target;
+                        setTimeout(() => {
+                            if (confirm(`测试 ${axis.toUpperCase()} 轴负方向。\n\n骨骼是否朝手腕方向弯曲？\n\n确定=是`)) {
+                                console.log(`>>> ${axis.toUpperCase()} 轴负方向: 正确！`);
+                            } else {
+                                console.log(`>>> ${axis.toUpperCase()} 轴: 都不对`);
+                            }
+                            testNext();
+                        }, 500);
+                        return;
+                    }
+                    testNext();
+                }, 500);
+            };
+
+            testNext();
+        };
+
+        // 测试所有手指的弯曲
+        window.testAllFingers = function() {
+            const fingerBones = {
+                thumb: ['指EL', '指E1L', '指E2L'],
+                index: ['指DL', '指D1L', '指D2L'],
+                middle: ['指CL', '指C1L', '指C2L'],
+                ring: ['指BL', '指B1L', '指B2L'],
+                pinky: ['指AL', '指A1L', '指A2L']
+            };
+
+            console.log('\n=== 测试所有手指 ===');
+            console.log('将依次弯曲每根手指，请观察弯曲方向是否正确');
+
+            const fingers = Object.keys(fingerBones);
+            let fingerIndex = 0;
+
+            const testFinger = () => {
+                if (fingerIndex >= fingers.length) {
+                    console.log('测试完成');
+                    resetAllBones();
+                    return;
+                }
+
+                const finger = fingers[fingerIndex];
+                const boneNames = fingerBones[finger];
+
+                console.log(`\n测试手指: ${finger}`);
+
+                // 弯曲手指
+                boneNames.forEach((boneName, i) => {
+                    if (bones[boneName]) {
+                        const factor = 1 - i * 0.2;
+                        animationTargets[boneName] = {
+                            x: -factor * 0.8,
+                            y: originalRotations[boneName].y,
+                            z: originalRotations[boneName].z
+                        };
+                    }
+                });
+
+                fingerIndex++;
+                setTimeout(() => {
+                    const result = prompt(`${finger} 手指弯曲测试\n\n弯曲方向是否正确（朝手腕）？\n1=正确\n2=方向相反\n3=方向错误（平行掌面）\n其他=跳过`);
+                    if (result === '1') {
+                        console.log(`>>> ${finger}: 正确`);
+                    } else if (result === '2') {
+                        console.log(`>>> ${finger}: 方向相反，需要改变 curlDirection`);
+                    } else if (result === '3') {
+                        console.log(`>>> ${finger}: 方向错误，需要换轴`);
+                    } else {
+                        console.log(`>>> ${finger}: 跳过`);
+                    }
+
+                    resetHand();
+                    setTimeout(testFinger, 300);
+                }, 500);
+            };
+
+            testFinger();
+        };
+
+        // ==================== 骨骼配置 ====================
+        // 定义每根手指的骨骼，以及每个骨骼的旋转限制
+        // 关键改进：为每个关节定义独立的弯曲特性，模拟真实手指运动
+
+        // 手臂骨骼配置（肩膀、上臂、前臂、手腕）
+        const armBoneConfig = {
+            left: {
+                shoulder: {
+                    name: '左肩',
+                    bones: ['肩L'],
+                    jointConfig: [{
+                        primaryAxis: 'z',
+                        secondaryAxis: 'x',
+                        // 左肩：z轴最大-59度，x轴最大80度
+                        limits: { x: [-0.8, 1.4], y: [-0.6, 0.6], z: [-1.2, -1.03] },
+                        description: '抬起/放下'
+                    }]
+                },
+                upperArm: {
+                    name: '左上臂',
+                    bones: ['上臂L'],
+                    jointConfig: [{
+                        primaryAxis: 'x',
+                        secondaryAxis: 'z',
+                        limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-0.5, 0.5] },
+                        description: '前后摆动'
+                    }]
+                },
+                forearm: {
+                    name: '左前臂',
+                    bones: ['小臂L'],
+                    jointConfig: [{
+                        primaryAxis: 'y',
+                        secondaryAxis: 'x',
+                        // 左前臂：x轴最大50度
+                        limits: { x: [-0.87, 0.87], y: [-1.5, 1.5], z: [-0.2, 0.2] },
+                        description: '旋转'
+                    }]
+                },
+                wrist: {
+                    name: '左手腕',
+                    bones: ['手L'],
+                    jointConfig: [{
+                        primaryAxis: 'x',
+                        secondaryAxis: 'z',
+                        // 左手腕：y轴-70到70度，z轴-60到60度
+                        limits: { x: [-0.8, 0.8], y: [-1.22, 1.22], z: [-1.05, 1.05] },
+                        description: '弯曲/侧摆'
+                    }]
+                }
+            },
+            right: {
+                shoulder: {
+                    name: '右肩',
+                    bones: ['肩R'],
+                    jointConfig: [{
+                        primaryAxis: 'z',
+                        secondaryAxis: 'x',
+                        // 右肩：z轴最小59度（与左手相反），x轴最大80度
+                        limits: { x: [-1.4, 0.8], y: [-0.6, 0.6], z: [1.03, 1.2] },
+                        description: '抬起/放下'
+                    }]
+                },
+                upperArm: {
+                    name: '右上臂',
+                    bones: ['上臂R'],
+                    jointConfig: [{
+                        primaryAxis: 'x',
+                        secondaryAxis: 'z',
+                        limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-0.5, 0.5] },
+                        description: '前后摆动'
+                    }]
+                },
+                forearm: {
+                    name: '右前臂',
+                    bones: ['小臂R'],
+                    jointConfig: [{
+                        primaryAxis: 'y',
+                        secondaryAxis: 'x',
+                        // 右前臂：x轴最大50度
+                        limits: { x: [-0.87, 0.87], y: [-1.5, 1.5], z: [-0.2, 0.2] },
+                        description: '旋转'
+                    }]
+                },
+                wrist: {
+                    name: '右手腕',
+                    bones: ['骨骼'],
+                    jointConfig: [{
+                        primaryAxis: 'x',
+                        secondaryAxis: 'z',
+                        // 右手腕：y轴-70到70度，z轴-60到60度
+                        limits: { x: [-0.8, 0.8], y: [-1.22, 1.22], z: [-1.05, 1.05] },
+                        description: '弯曲/侧摆'
+                    }]
+                }
+            }
+        };
+
+        const boneConfig = {
+            left: {
+                // 左手基准：参考右手小拇指的正确配置
+                thumb: {
+                    name: '拇指',
+                    bones: ['指EL', '指E1L', '指E2L'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.5, 0.5], z: [-1.0, 1.0] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-1.0, 1.0] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.2, 0.2], z: [-0.8, 0.8] } }
+                    ]
+                },
+                index: {
+                    name: '食指',
+                    bones: ['指DL', '指D1L', '指D2L'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.5, 0.5], z: [-0.8, 0.8] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-0.5, 0.5] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.2, 0.2], z: [-0.3, 0.3] } }
+                    ]
+                },
+                middle: {
+                    name: '中指',
+                    bones: ['指CL', '指C1L', '指C2L'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.4, 0.4], z: [-0.6, 0.6] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.2, 0.2], z: [-0.4, 0.4] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.15, 0.15], z: [-0.2, 0.2] } }
+                    ]
+                },
+                ring: {
+                    name: '无名指',
+                    bones: ['指BL', '指B1L', '指B2L'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.5, 0.5], z: [-0.7, 0.7] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-0.5, 0.5] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.2, 0.2], z: [-0.3, 0.3] } }
+                    ]
+                },
+                pinky: {
+                    name: '小指',
+                    bones: ['指AL', '指A1L', '指A2L'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.6, 0.6], z: [-0.8, 0.8] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.4, 0.4], z: [-0.6, 0.6] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.25, 0.25], z: [-0.4, 0.4] } }
+                    ]
+                }
+            },
+            right: {
+                thumb: {
+                    name: '拇指',
+                    bones: ['RightHand001', 'RightHand002', 'RightHand003'],
+                    curlAxis: ['z', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-0.8, 0.8], y: [-0.5, 0.5], z: [-1.0, 1.0] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.3, 0.3], z: [-1.0, 1.0] } },
+                        { limits: { x: [-1.0, 1.0], y: [-0.2, 0.2], z: [-0.8, 0.8] } }
+                    ]
+                },
+                index: {
+                    name: '食指',
+                    bones: ['RightHand005', 'RightHand006', 'RightHand007'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.5, 0.5], z: [-0.8, 0.8] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-0.5, 0.5] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.2, 0.2], z: [-0.3, 0.3] } }
+                    ]
+                },
+                middle: {
+                    name: '中指',
+                    bones: ['RightHand009', 'RightHand010', 'RightHand011'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.4, 0.4], z: [-0.6, 0.6] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.2, 0.2], z: [-0.4, 0.4] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.15, 0.15], z: [-0.2, 0.2] } }
+                    ]
+                },
+                ring: {
+                    name: '无名指',
+                    bones: ['RightHand013', 'RightHand014', 'RightHand015'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.5, 0.5], z: [-0.7, 0.7] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.3, 0.3], z: [-0.5, 0.5] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.2, 0.2], z: [-0.3, 0.3] } }
+                    ]
+                },
+                pinky: {
+                    name: '小指',
+                    bones: ['RightHand017', 'RightHand018', 'RightHand019'],
+                    curlAxis: ['x', 'x', 'x'],
+                    curlDirection: [-1, -1, -1],
+                    jointConfig: [
+                        { limits: { x: [-1.2, 1.2], y: [-0.6, 0.6], z: [-0.8, 0.8] } },
+                        { limits: { x: [-1.5, 1.5], y: [-0.4, 0.4], z: [-0.6, 0.6] } },
+                        { limits: { x: [-1.2, 1.2], y: [-0.25, 0.25], z: [-0.4, 0.4] } }
+                    ]
+                }
+            }
+        };
+
+        // ==================== 手语预设 ====================
+        // 每个预设包含：
+        // - fingers: 手指动作 { curl, spread }
+        // - arm: 手臂动作 { shoulder, upperArm, forearm, wrist }
+        const signPresets = {
+            // 打招呼 - 五指张开，手臂前伸挥动
+            hello: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },      // 手臂抬起
+                        upperArm: { x: 0, y: 0, z: 0 },       // 前伸
+                        forearm: { x: 0, y: 0, z: 0 },         // 稍微旋转
+                        wrist: { x: 0, y: 0, z: 0 }             // 手腕微调
+                    },
+                    fingers: {
+                        thumb: { curl: 0.15, spread: 0.3 },
+                        index: { curl: 0.05, spread: 0.1 },
+                        middle: { curl: 0.03, spread: 0 },
+                        ring: { curl: 0.05, spread: -0.05 },
+                        pinky: { curl: 0.08, spread: -0.15 }
+                    }
+                }
+            },
+            // 谢谢 - 点头致谢姿势
+            thanks: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.2, spread: 0.4 },
+                        index: { curl: 0.7, spread: 0 },
+                        middle: { curl: 0.75, spread: 0 },
+                        ring: { curl: 0.7, spread: 0 },
+                        pinky: { curl: 0.65, spread: 0.1 }
+                    }
+                }
+            },
+            // OK手势 - 手臂前伸
+            ok: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.5, spread: 0.6 },
+                        index: { curl: 0.55, spread: 0.3 },
+                        middle: { curl: 0.02, spread: -0.1 },
+                        ring: { curl: 0.02, spread: -0.15 },
+                        pinky: { curl: 0.05, spread: -0.2 }
+                    }
+                }
+            },
+            // 是/对 - 食指向上点
+            yes: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.6, spread: 0.2 },
+                        index: { curl: 0.02, spread: 0 },
+                        middle: { curl: 0.8, spread: 0 },
+                        ring: { curl: 0.75, spread: 0 },
+                        pinky: { curl: 0.7, spread: 0.05 }
+                    }
+                }
+            },
+            // 不/错 - 食指左右摆动
+            no: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.5, spread: 0.3 },
+                        index: { curl: 0.03, spread: 0.2 },
+                        middle: { curl: 0.85, spread: 0 },
+                        ring: { curl: 0.8, spread: 0 },
+                        pinky: { curl: 0.75, spread: 0.1 }
+                    }
+                }
+            },
+            // 和平/耶 - 食指中指V字
+            peace: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.65, spread: 0.1 },
+                        index: { curl: 0.02, spread: 0.15 },
+                        middle: { curl: 0.02, spread: -0.1 },
+                        ring: { curl: 0.9, spread: 0 },
+                        pinky: { curl: 0.85, spread: 0.1 }
+                    }
+                }
+            },
+            // 点赞 - 竖大拇指
+            thumbsUp: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.1, spread: 0.5 },
+                        index: { curl: 0.9, spread: 0 },
+                        middle: { curl: 0.92, spread: 0 },
+                        ring: { curl: 0.88, spread: 0 },
+                        pinky: { curl: 0.85, spread: 0.1 }
+                    }
+                }
+            },
+            // 握拳
+            fist: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.8, spread: -0.3 },    // 拇指向内收
+                        index: { curl: 1.0, spread: -0.2 },     // 食指向内并拢
+                        middle: { curl: 1.0, spread: 0 },       // 中指保持中间
+                        ring: { curl: 1.0, spread: 0.15 },      // 无名指向内
+                        pinky: { curl: 1.0, spread: 0.3 }       // 小指向内收
+                    }
+                }
+            },
+            // 张开手掌
+            open: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.05, spread: 0.5 },
+                        index: { curl: 0, spread: 0.15 },
+                        middle: { curl: 0, spread: 0 },
+                        ring: { curl: 0, spread: -0.1 },
+                        pinky: { curl: 0, spread: -0.25 }
+                    }
+                }
+            },
+            // 指向
+            point: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.55, spread: 0.2 },
+                        index: { curl: 0.02, spread: 0 },
+                        middle: { curl: 0.88, spread: 0 },
+                        ring: { curl: 0.85, spread: 0 },
+                        pinky: { curl: 0.8, spread: 0.1 }
+                    }
+                }
+            },
+            // 数字1
+            one: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.6, spread: 0.15 },
+                        index: { curl: 0.02, spread: 0 },
+                        middle: { curl: 0.9, spread: 0 },
+                        ring: { curl: 0.88, spread: 0 },
+                        pinky: { curl: 0.85, spread: 0.05 }
+                    }
+                }
+            },
+            // 数字2
+            two: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.6, spread: 0.1 },
+                        index: { curl: 0.02, spread: 0.1 },
+                        middle: { curl: 0.02, spread: -0.05 },
+                        ring: { curl: 0.9, spread: 0 },
+                        pinky: { curl: 0.85, spread: 0.1 }
+                    }
+                }
+            },
+            // 数字3
+            three: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.55, spread: 0.2 },
+                        index: { curl: 0.02, spread: 0.1 },
+                        middle: { curl: 0.02, spread: 0 },
+                        ring: { curl: 0.02, spread: -0.1 },
+                        pinky: { curl: 0.88, spread: 0.1 }
+                    }
+                }
+            },
+            // 数字4
+            four: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.7, spread: 0.1 },
+                        index: { curl: 0.02, spread: 0.15 },
+                        middle: { curl: 0.02, spread: 0.05 },
+                        ring: { curl: 0.02, spread: -0.05 },
+                        pinky: { curl: 0.02, spread: -0.15 }
+                    }
+                }
+            },
+            // 数字5
+            five: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.05, spread: 0.4 },
+                        index: { curl: 0.02, spread: 0.12 },
+                        middle: { curl: 0.02, spread: 0.04 },
+                        ring: { curl: 0.02, spread: -0.04 },
+                        pinky: { curl: 0.02, spread: -0.12 }
+                    }
+                }
+            },
+            // 停/等待
+            stop: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.1, spread: 0.45 },
+                        index: { curl: 0.02, spread: 0.15 },
+                        middle: { curl: 0.02, spread: 0.05 },
+                        ring: { curl: 0.02, spread: -0.05 },
+                        pinky: { curl: 0.02, spread: -0.15 }
+                    }
+                }
+            },
+            // 握手
+            handshake: {
+                left: {
+                    arm: {
+                        shoulder: { x: 0, y: 0, z: 0 },
+                        upperArm: { x: 0, y: 0, z: 0 },
+                        forearm: { x: 0, y: 0, z: 0 },
+                        wrist: { x: 0, y: 0, z: 0 }
+                    },
+                    fingers: {
+                        thumb: { curl: 0.3, spread: 0.25 },
+                        index: { curl: 0.4, spread: 0 },
+                        middle: { curl: 0.4, spread: 0 },
+                        ring: { curl: 0.4, spread: 0 },
+                        pinky: { curl: 0.35, spread: 0.05 }
+                    }
+                }
+            }
+        };
+
+        // ==================== 初始化 ====================
+        function init() {
+            const container = document.getElementById('container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3, 1.8);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 6, 0);
+
+            setupLights();
+            setupGround();
+            loadModel();
+            setupEventListeners();
+
+            animate();
+        }
+
+        function setupLights() {
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+            mainLight.position.set(5, 10, 5);
+            mainLight.castShadow = true;
+            scene.add(mainLight);
+            scene.add(new THREE.DirectionalLight(0x8888ff, 0.3)).position.set(-5, 5, -5);
+        }
+
+        function setupGround() {
+            const gridHelper = new THREE.GridHelper(10, 20, 0x444466, 0x333344);
+            gridHelper.position.y = -6;
+            scene.add(gridHelper);
+        }
+
+        function loadModel() {
+            const loader = new GLTFLoader();
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/');
+            loader.setDRACOLoader(dracoLoader);
+
+            loader.load('./model.glb', (gltf) => {
+                model = gltf.scene;
+
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 1.5 / maxDim;
+                model.scale.setScalar(scale);
+
+                const scaledBox = new THREE.Box3().setFromObject(model);
+                const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+                const scaledSize = scaledBox.getSize(new THREE.Vector3());
+
+                model.position.x = -scaledCenter.x;
+                model.position.y = -scaledBox.min.y + 1.3;
+                model.position.z = -scaledCenter.z;
+                model.rotation.y = Math.PI / 5;
+
+                // 收集骨骼
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                    if (child.isBone) {
+                        bones[child.name] = child;
+                        originalRotations[child.name] = {
+                            x: child.rotation.x,
+                            y: child.rotation.y,
+                            z: child.rotation.z
+                        };
+                        currentRotations[child.name] = {
+                            x: child.rotation.x,
+                            y: child.rotation.y,
+                            z: child.rotation.z
+                        };
+                        animationTargets[child.name] = {
+                            x: child.rotation.x,
+                            y: child.rotation.y,
+                            z: child.rotation.z
+                        };
+                    }
+                });
+
+                console.log('找到骨骼:', Object.keys(bones));
+
+                scene.add(model);
+                document.getElementById('loading').classList.add('hidden');
+
+                // 创建骨骼控制UI
+                createBoneControls();
+
+            }, (progress) => {
+                document.querySelector('#loading p').textContent =
+                    `加载中: ${(progress.loaded / progress.total * 100).toFixed(0)}%`;
+            }, (error) => {
+                console.error('错误:', error);
+                document.querySelector('#loading p').textContent = '加载失败!';
+            });
+        }
+
+        // ==================== 创建骨骼控制UI ====================
+        function createBoneControls() {
+            const container = document.getElementById('finger-controls');
+            container.innerHTML = '';
+
+            // 1. 创建手臂控制区域
+            const armConfig = armBoneConfig[currentHand];
+            const armSection = document.createElement('div');
+            armSection.innerHTML = '<h4 style="color:#00ff88; margin-bottom:8px; font-size:13px;">手臂控制</h4>';
+
+            for (const [armKey, armData] of Object.entries(armConfig)) {
+                const group = document.createElement('div');
+                group.className = 'arm-group';
+
+                const title = document.createElement('h4');
+                title.textContent = armData.name;
+                group.appendChild(title);
+
+                armData.bones.forEach((boneName, index) => {
+                    if (!bones[boneName]) {
+                        // 骨骼不存在时显示提示
+                        const notFound = document.createElement('div');
+                        notFound.style.cssText = 'font-size:10px; color:#666; margin-bottom:4px;';
+                        notFound.textContent = `未找到: ${boneName}`;
+                        group.appendChild(notFound);
+                        return;
+                    }
+
+                    const jointCfg = armData.jointConfig[index];
+                    const limits = jointCfg.limits;
+
+                    // 为X、Y、Z三个轴创建滑块
+                    ['x', 'y', 'z'].forEach(axis => {
+                        const control = document.createElement('div');
+                        control.className = 'bone-control';
+
+                        const axisLabels = { x: '前后', y: '旋转', z: '抬放' };
+                        const label = document.createElement('label');
+                        label.innerHTML = `<span>${axisLabels[axis]}(${axis.toUpperCase()})</span><span id="arm-val-${boneName}-${axis}">0°</span>`;
+                        control.appendChild(label);
+
+                        const slider = document.createElement('input');
+                        slider.type = 'range';
+                        const minDeg = Math.round(limits[axis][0] * 180 / Math.PI);
+                        const maxDeg = Math.round(limits[axis][1] * 180 / Math.PI);
+                        slider.min = minDeg.toString();
+                        slider.max = maxDeg.toString();
+                        slider.value = '0';
+                        slider.id = `arm-slider-${boneName}-${axis}`;
+                        slider.addEventListener('input', (e) => {
+                            const angle = parseFloat(e.target.value);
+                            setArmBoneRotation(boneName, axis, angle, limits);
+                            document.getElementById(`arm-val-${boneName}-${axis}`).textContent = angle + '°';
+                        });
+                        control.appendChild(slider);
+                        group.appendChild(control);
+                    });
+                });
+
+                armSection.appendChild(group);
+            }
+
+            container.appendChild(armSection);
+
+            // 2. 创建手指控制区域
+            const fingerSection = document.createElement('div');
+            fingerSection.innerHTML = '<h4 style="color:#ffaa00; margin:15px 0 8px 0; font-size:13px;">手指控制</h4>';
+
+            const handConfig = boneConfig[currentHand];
+
+            for (const [fingerKey, fingerData] of Object.entries(handConfig)) {
+                const group = document.createElement('div');
+                group.className = 'finger-group';
+
+                const title = document.createElement('h4');
+                title.textContent = fingerData.name;
+                group.appendChild(title);
+
+                // 快速弯曲控制
+                const quickControl = document.createElement('div');
+                quickControl.className = 'quick-control';
+                const quickLabel = document.createElement('label');
+                quickLabel.innerHTML = '<span>快速弯曲</span><span id="quick-val-' + fingerKey + '">0%</span>';
+                quickControl.appendChild(quickLabel);
+
+                const quickSlider = document.createElement('input');
+                quickSlider.type = 'range';
+                quickSlider.min = '0';
+                quickSlider.max = '100';
+                quickSlider.value = '0';
+                quickSlider.id = `quick-${fingerKey}`;
+                quickSlider.addEventListener('input', (e) => {
+                    const curl = parseFloat(e.target.value) / 100;
+                    document.getElementById(`quick-val-${fingerKey}`).textContent = Math.round(curl * 100) + '%';
+                    setFingerCurl(fingerKey, curl, fingerData);
+                });
+                quickControl.appendChild(quickSlider);
+                group.appendChild(quickControl);
+
+                // 关节名称
+                const jointNames = ['掌指关节', '近端关节', '远端关节'];
+
+                // 为每个骨骼创建控制
+                fingerData.bones.forEach((boneName, index) => {
+                    if (!bones[boneName]) return;
+
+                    const jointCfg = fingerData.jointConfig[index];
+                    if (!jointCfg) return;
+
+                    const control = document.createElement('div');
+                    control.className = 'bone-control';
+
+                    const label = document.createElement('label');
+                    label.innerHTML = `<span>${jointNames[index]}</span><span id="val-${boneName}">0°</span>`;
+                    control.appendChild(label);
+
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+
+                    // 根据当前轴和关节限制设置滑块范围
+                    const limits = jointCfg.limits;
+                    const axis = currentAxis;
+                    const minDeg = Math.round(limits[axis][0] * 180 / Math.PI);
+                    const maxDeg = Math.round(limits[axis][1] * 180 / Math.PI);
+
+                    slider.min = minDeg.toString();
+                    slider.max = maxDeg.toString();
+                    slider.value = '0';
+                    slider.id = `slider-${boneName}`;
+                    slider.addEventListener('input', (e) => {
+                        const angle = parseFloat(e.target.value);
+                        setBoneRotation(boneName, angle, jointCfg);
+                        document.getElementById(`val-${boneName}`).textContent = angle + '°';
+                    });
+                    control.appendChild(slider);
+
+                    group.appendChild(control);
+                });
+
+                fingerSection.appendChild(group);
+            }
+
+            container.appendChild(fingerSection);
+        }
+
+        // ==================== 设置手臂骨骼旋转 ====================
+        function setArmBoneRotation(boneName, axis, angleDegrees, limits) {
+            const bone = bones[boneName];
+            if (!bone) return;
+
+            const angleRad = angleDegrees * Math.PI / 180;
+            const clampedAngle = Math.max(limits[axis][0], Math.min(limits[axis][1], angleRad));
+
+            // 只更新指定轴，其他轴保持当前值
+            if (!animationTargets[boneName]) {
+                animationTargets[boneName] = { ...originalRotations[boneName] };
+            }
+            animationTargets[boneName][axis] = clampedAngle;
+        }
+
+        // ==================== 设置整根手指弯曲 ====================
+        function setFingerCurl(fingerKey, curl, fingerData) {
+            const curlAxis = fingerData.curlAxis || ['x', 'x', 'x'];
+            const curlDirection = fingerData.curlDirection || [-1, -1, -1];
+
+            // 不同手指的最大弯曲角度调整（让握拳时手指并拢）
+            const fingerMaxAngle = {
+                thumb: 1.2,    // 拇指弯曲较少
+                index: 1.5,    // 食指标准
+                middle: 1.6,   // 中指稍多
+                ring: 1.7,     // 无名指更多
+                pinky: 1.8     // 小指最多（最长，需要弯曲更多才能并拢）
+            };
+            const maxAngle = fingerMaxAngle[fingerKey] || 1.5;
+
+            console.log(`弯曲手指: ${fingerKey}, 轴: ${curlAxis}, 方向: ${curlDirection}, 值: ${curl}, 模式: ${motionMode}`);
+
+            fingerData.bones.forEach((boneName, jointIndex) => {
+                const bone = bones[boneName];
+                if (!bone) return;
+
+                const jointCfg = fingerData.jointConfig[jointIndex];
+                if (!jointCfg) return;
+
+                const limits = jointCfg.limits;
+                const axis = curlAxis[jointIndex] || 'x';
+                const dir = curlDirection[jointIndex] || -1;
+
+                let curlAngle;
+
+                if (motionMode === 'advanced') {
+                    // 高级模式：使用更自然的弯曲曲线
+                    const jointFactor = Math.pow(1 - (jointIndex * 0.25), 1.5);
+                    const naturalCurl = Math.sin(curl * Math.PI / 2);
+                    curlAngle = naturalCurl * maxAngle * jointFactor * dir;
+                } else {
+                    // 简单模式：线性弯曲
+                    const jointFactor = 1 - (jointIndex * 0.15);
+                    curlAngle = curl * maxAngle * jointFactor * dir;
+                }
+
+                // 限制在允许范围内
+                const clampedAngle = Math.max(limits[axis][0], Math.min(limits[axis][1], curlAngle));
+
+                console.log(`  ${boneName}: 轴=${axis}, 角度=${(clampedAngle*180/Math.PI).toFixed(1)}°`);
+
+                // 构建目标旋转
+                const target = {
+                    x: originalRotations[boneName].x,
+                    y: originalRotations[boneName].y,
+                    z: originalRotations[boneName].z
+                };
+                target[axis] = clampedAngle;
+
+                animationTargets[boneName] = target;
+
+                // 更新滑块显示
+                const slider = document.getElementById(`slider-${boneName}`);
+                if (slider) {
+                    const degrees = Math.round(clampedAngle * 180 / Math.PI);
+                    slider.value = degrees;
+                    document.getElementById(`val-${boneName}`).textContent = degrees + '°';
+                }
+            });
+        }
+
+        // ==================== 设置骨骼旋转 ====================
+        function setBoneRotation(boneName, angleDegrees, jointCfg) {
+            const bone = bones[boneName];
+            if (!bone) return;
+
+            const angleRad = angleDegrees * Math.PI / 180;
+
+            // 获取当前轴的限制
+            const limits = jointCfg ? jointCfg.limits : null;
+            const clampedAngle = limits ?
+                Math.max(limits[currentAxis][0], Math.min(limits[currentAxis][1], angleRad)) :
+                angleRad;
+
+            animationTargets[boneName] = {
+                x: currentAxis === 'x' ? clampedAngle : animationTargets[boneName].x,
+                y: currentAxis === 'y' ? clampedAngle : animationTargets[boneName].y,
+                z: currentAxis === 'z' ? clampedAngle : animationTargets[boneName].z
+            };
+        }
+
+        // ==================== 播放手语预设 ====================
+        window.playSign = function(signName) {
+            const sign = signPresets[signName];
+            if (!sign) return;
+
+            const handSign = sign[currentHand];
+            if (!handSign) return;
+
+            // 1. 应用手臂动作
+            if (handSign.arm) {
+                const armConfig = armBoneConfig[currentHand];
+
+                for (const [armKey, armData] of Object.entries(handSign.arm)) {
+                    const armBoneCfg = armConfig[armKey];
+                    if (!armBoneCfg) continue;
+
+                    armBoneCfg.bones.forEach((boneName, index) => {
+                        const bone = bones[boneName];
+                        if (!bone) {
+                            console.warn(`未找到骨骼: ${boneName}`);
+                            return;
+                        }
+
+                        const jointCfg = armBoneCfg.jointConfig[index];
+                        const limits = jointCfg.limits;
+
+                        // 只有当值非零时才应用，否则保持原始姿势
+                        const targetX = (armData.x !== 0) ? armData.x : originalRotations[boneName].x;
+                        const targetY = (armData.y !== 0) ? armData.y : originalRotations[boneName].y;
+                        const targetZ = (armData.z !== 0) ? armData.z : originalRotations[boneName].z;
+
+                        // 限制在允许范围内
+                        const clampedX = Math.max(limits.x[0], Math.min(limits.x[1], targetX));
+                        const clampedY = Math.max(limits.y[0], Math.min(limits.y[1], targetY));
+                        const clampedZ = Math.max(limits.z[0], Math.min(limits.z[1], targetZ));
+
+                        animationTargets[boneName] = {
+                            x: clampedX,
+                            y: clampedY,
+                            z: clampedZ
+                        };
+
+                        console.log(`手臂骨骼 ${boneName}: x=${(clampedX*180/Math.PI).toFixed(1)}°, y=${(clampedY*180/Math.PI).toFixed(1)}°, z=${(clampedZ*180/Math.PI).toFixed(1)}°`);
+                    });
+                }
+            }
+
+            // 2. 应用手指动作
+            if (handSign.fingers) {
+                for (const [fingerKey, fingerData] of Object.entries(handSign.fingers)) {
+                    const fingerConfig = boneConfig[currentHand][fingerKey];
+                    if (!fingerConfig) continue;
+
+                    const curl = fingerData.curl || 0;      // 弯曲程度 0-1
+                    const spread = fingerData.spread || 0;  // 展开程度 -1到1
+
+                    const curlAxis = fingerConfig.curlAxis || ['x', 'x', 'x'];
+                    const curlDirection = fingerConfig.curlDirection || [1, 1, 1];
+
+                    fingerConfig.bones.forEach((boneName, jointIndex) => {
+                        const bone = bones[boneName];
+                        if (!bone) return;
+
+                        const jointCfg = fingerConfig.jointConfig[jointIndex];
+                        if (!jointCfg) return;
+
+                        const limits = jointCfg.limits;
+                        const axis = curlAxis[jointIndex] || 'x';
+                        const dir = curlDirection[jointIndex] || 1;
+
+                        // 计算弯曲角度
+                        const jointFactor = 1 - (jointIndex * 0.15);
+                        const curlAngle = curl * 1.5 * jointFactor * dir;
+
+                        // 展开角度（在Z轴）- 增大系数让手指能更好地并拢
+                        const spreadAngle = spread * 0.6;
+
+                        // 构建目标旋转
+                        const target = {
+                            x: originalRotations[boneName].x,
+                            y: originalRotations[boneName].y,
+                            z: originalRotations[boneName].z
+                        };
+
+                        // 应用弯曲
+                        target[axis] = Math.max(limits[axis][0], Math.min(limits[axis][1], curlAngle));
+
+                        // 应用展开（在所有关节，让整根手指并拢）
+                        target.z = Math.max(limits.z[0], Math.min(limits.z[1], spreadAngle));
+
+                        animationTargets[boneName] = target;
+
+                        // 更新滑块显示（显示X轴角度）
+                        const slider = document.getElementById(`slider-${boneName}`);
+                        if (slider) {
+                            const degrees = Math.round(targetX * 180 / Math.PI);
+                            slider.value = degrees;
+                            document.getElementById(`val-${boneName}`).textContent = degrees + '°';
+                        }
+                    });
+                }
+            }
+        };
+
+        // ==================== 选择手 ====================
+        window.selectHand = function(hand) {
+            currentHand = hand;
+            document.querySelectorAll('.hand-tab').forEach((tab, i) => {
+                tab.classList.toggle('active', (hand === 'left' && i === 0) || (hand === 'right' && i === 1));
+            });
+            createBoneControls();
+        };
+
+        // ==================== 选择旋转轴 ====================
+        window.selectAxis = function(axis) {
+            currentAxis = axis;
+            document.querySelectorAll('.axis-btn').forEach((btn, i) => {
+                const axes = ['x', 'y', 'z'];
+                btn.classList.toggle('active', axes[i] === axis);
+            });
+        };
+
+        // ==================== 重置 ====================
+        window.resetAllBones = function() {
+            for (const name in bones) {
+                animationTargets[name] = { ...originalRotations[name] };
+            }
+            createBoneControls();
+        };
+
+        window.resetHand = function() {
+            // 重置手臂骨骼
+            const armConfig = armBoneConfig[currentHand];
+            for (const armData of Object.values(armConfig)) {
+                for (const boneName of armData.bones) {
+                    if (bones[boneName]) {
+                        animationTargets[boneName] = { ...originalRotations[boneName] };
+                    }
+                }
+            }
+
+            // 重置手指骨骼
+            const handConfig = boneConfig[currentHand];
+            for (const [fingerKey, fingerData] of Object.entries(handConfig)) {
+                for (const boneName of fingerData.bones) {
+                    if (bones[boneName]) {
+                        animationTargets[boneName] = { ...originalRotations[boneName] };
+                    }
+                }
+                // 重置快速弯曲滑块
+                const quickSlider = document.getElementById(`quick-${fingerKey}`);
+                if (quickSlider) {
+                    quickSlider.value = '0';
+                    document.getElementById(`quick-val-${fingerKey}`).textContent = '0%';
+                }
+            }
+            createBoneControls();
+        };
+
+        window.savePose = function() {
+            const pose = { left: {}, right: {} };
+
+            for (const hand of ['left', 'right']) {
+                const handConfig = boneConfig[hand];
+
+                for (const [fingerKey, fingerData] of Object.entries(handConfig)) {
+                    pose[hand][fingerKey] = { curl: 0, spread: 0 };
+
+                    // 计算平均弯曲程度
+                    let totalCurl = 0;
+                    let count = 0;
+                    fingerData.bones.forEach((boneName, index) => {
+                        if (currentRotations[boneName]) {
+                            const jointCfg = fingerData.jointConfig[index];
+                            const limits = jointCfg.limits;
+                            const currentX = currentRotations[boneName].x;
+                            // 归一化到0-1
+                            const normalized = (currentX - limits.x[0]) / (limits.x[1] - limits.x[0]);
+                            totalCurl += normalized;
+                            count++;
+                        }
+                    });
+                    if (count > 0) {
+                        pose[hand][fingerKey].curl = Math.round((totalCurl / count) * 100) / 100;
+                    }
+                }
+            }
+
+            console.log('保存的姿势:', JSON.stringify(pose, null, 2));
+            console.log('左手:', JSON.stringify(pose.left, null, 2));
+
+            // 同时保存骨骼原始旋转值
+            const boneRotations = {};
+            for (const boneName in bones) {
+                const bone = bones[boneName];
+                boneRotations[boneName] = {
+                    x: parseFloat(bone.rotation.x.toFixed(4)),
+                    y: parseFloat(bone.rotation.y.toFixed(4)),
+                    z: parseFloat(bone.rotation.z.toFixed(4))
+                };
+            }
+            console.log('骨骼旋转值（可直接复制使用）:');
+            console.log(JSON.stringify(boneRotations, null, 2));
+
+            alert('姿势已保存到控制台，按F12查看\n\n骨骼旋转值也已输出');
+        };
+
+        // ==================== 事件监听 ====================
+        function setupEventListeners() {
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // ==================== 动画更新 ====================
+        function updateAnimations() {
+            const lerpSpeed = 0.15;
+
+            for (const name in bones) {
+                const bone = bones[name];
+                const target = animationTargets[name];
+                const current = currentRotations[name];
+
+                if (target && current) {
+                    current.x += (target.x - current.x) * lerpSpeed;
+                    current.y += (target.y - current.y) * lerpSpeed;
+                    current.z += (target.z - current.z) * lerpSpeed;
+
+                    bone.rotation.x = current.x;
+                    bone.rotation.y = current.y;
+                    bone.rotation.z = current.z;
+                }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateAnimations();
+            document.getElementById('fps').textContent = Math.round(1 / clock.getDelta());
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

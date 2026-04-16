@@ -1,0 +1,46 @@
+# .MCAP file format
+File format of the MeshCap metadata file.
+Files in charge of using this data:
+* [src/meshcap/parse-mcap-file.ts](src/meshcap/parse-mcap-file.ts)
+* [src/meshcap/write-mcap-file.ts](src/meshcap/write-mcap-file.ts)
+
+File compressed with: https://www.npmjs.com/package/fflate using deflate at level 9
+
+```
+ [4 bytes] magic number
+ [1 bytes] version 
+ [1 bytes] clips count
+ [2 bytes] prefered atlas width (the one used in the editor)
+ [1 byte] prefered atlas padding (the one used in the editor)
+ Per clip:
+   [1 byte]  name length
+   [n bytes] name string (utf8)
+   [2 bytes] total frames
+   [1 byte] fps
+   [1 bytes] scale
+   [1 bytes] aspectRatio
+ Per frame ( normalized coordinates inside of the atlas, not the original video ):
+  frame UV location in the atlas
+   [2 bytes] u
+   [2 bytes] v
+   [2 bytes] w
+   [2 bytes] h
+  landmarks crop coords
+   [2 bytes] u
+   [2 bytes] v
+   [2 bytes] w
+   [2 bytes] h
+ For each 478 landmarks ( 2 bytes ):
+   [2 byte] x
+   [2 byte] y
+   [2 byte] z
+Per clip:
+   [2 bytes] clip duration
+   [2 bytes] audio clip start time ( in seconds. if == 1 it means it doesnt use sound )
+   
+Per frame ( flatmap of all the frames from all the clips )
+   [2 bytes] frame's start time delta in clip's time ( 0 being the start of the clip ) 
+
+Per Clip per frame (face transofrmation matrices of the face in each frame )
+	[64 bytes]
+```
